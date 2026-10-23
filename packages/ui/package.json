@@ -61,6 +61,7 @@
     "build": "echo '@openstatus/ui has no build step (registry builds separately)'",
     "registry:build": "node scripts/transform-imports.mjs && shadcn build --cwd dist --output public/r registry.json && node scripts/copy-to-web.mjs",
     "lint": "oxlint",
+    "test": "vitest run",
     "tsc": "tsc --noEmit"
   },
   "dependencies": {
@@ -125,7 +126,8 @@
     "@types/react-dom": "catalog:",
     "shadcn": "catalog:",
     "tailwindcss": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "next-themes": "catalog:",

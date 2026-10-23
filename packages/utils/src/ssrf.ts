@@ -2,49 +2,46 @@ import { z } from "zod";
 
 // --- SSRF Protection ---
 
-const BLOCKED_IPV4_RANGES = [
-  // Loopback
-  { prefix: "127.", mask: null },
-  // Link-local
-  { prefix: "169.254.", mask: null },
-  // Private 10.x.x.x
-  { prefix: "10.", mask: null },
-  // Private 172.16.0.0 - 172.31.255.255
-  {
-    prefix: "172.",
-    mask: (ip: string) => {
-      const second = Number.parseInt(ip.split(".")[1] ?? "", 10);
-      return second >= 16 && second <= 31;
-    },
-  },
-  // Private 192.168.x.x
-  { prefix: "192.168.", mask: null },
-  // Current network
-  { prefix: "0.", mask: null },
-];
-
 const BLOCKED_HOSTNAMES = new Set([
   "localhost",
+  "localhost.localdomain",
   "metadata.google.internal",
   "metadata.internal",
 ]);
 
 function isBlockedIPv4(ip: string): boolean {
-  for (const range of BLOCKED_IPV4_RANGES) {
-    if (ip.startsWith(range.prefix)) {
-      if (range.mask === null || range.mask(ip)) return true;
-    }
+  const octets = ip.split(".").map(Number);
+  if (
+    octets.length !== 4 ||
+    octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
+  ) {
+    return true;
   }
-  return false;
+
+  const [first, second, third] = octets as [number, number, number, number];
+  if (first === 0 || first === 10 || first === 127) return true;
+  if (first === 100 && second >= 64 && second <= 127) return true;
+  if (first === 169 && second === 254) return true;
+  if (first === 172 && second >= 16 && second <= 31) return true;
+  if (first === 192 && second === 168) return true;
+  if (first === 192 && second === 0 && (third === 0 || third === 2)) {
+    return true;
+  }
+  if (first === 192 && second === 88 && third === 99) return true;
+  if (first === 198 && (second === 18 || second === 19)) return true;
+  if (first === 198 && second === 51 && third === 100) return true;
+  if (first === 203 && second === 0 && third === 113) return true;
+  return first >= 224;
 }
 
 function isBlockedIPv6(ip: string): boolean {
   const normalized = ip.toLowerCase();
   if (normalized === "::1" || normalized === "::") return true;
-  // Unique local addresses (fc00::/7)
-  if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true;
-  // Link-local (fe80::/10)
-  if (normalized.startsWith("fe80")) return true;
+  const firstHextet = Number.parseInt(normalized.split(":")[0] ?? "", 16);
+  if (firstHextet >= 0xfc00 && firstHextet <= 0xfdff) return true;
+  if (firstHextet >= 0xfe80 && firstHextet <= 0xfeff) return true;
+  if (firstHextet >= 0xff00 && firstHextet <= 0xffff) return true;
+  if (normalized.startsWith("2001:db8:")) return true;
   // IPv4-mapped IPv6 addresses
   // Node's URL parser converts ::ffff:127.0.0.1 to ::ffff:7f00:1 (hex form)
   // Handle both dotted-quad (::ffff:127.0.0.1) and hex (::ffff:7f00:1) forms
@@ -67,7 +64,7 @@ function isBlockedIPv6(ip: string): boolean {
 }
 
 function isBlockedHost(hostname: string): boolean {
-  const lower = hostname.toLowerCase();
+  const lower = hostname.toLowerCase().replace(/\.$/, "");
   if (BLOCKED_HOSTNAMES.has(lower)) return true;
 
   // Check if hostname is a raw IP address
@@ -112,15 +109,6 @@ export async function assertSafeUrl(urlString: string): Promise<void> {
 }
 
 const MAX_REDIRECTS = 3;
-
-function isSameService(from: URL, to: URL): boolean {
-  return (
-    to.hostname === from.hostname &&
-    to.port === from.port &&
-    (to.protocol === from.protocol ||
-      (from.protocol === "http:" && to.protocol === "https:"))
-  );
-}
 
 function isSafeRedirect(from: URL, to: URL): boolean {
   return (

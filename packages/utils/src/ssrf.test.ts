@@ -66,13 +66,38 @@ describe("assertSafeUrlSync", () => {
     }
   });
 
+  describe("blocks non-public IPv4 address space", () => {
+    const blocked = [
+      "http://100.64.0.1/", // carrier-grade NAT
+      "http://100.127.255.254/",
+      "http://192.0.0.1/", // IETF protocol assignments
+      "http://192.0.2.1/", // documentation
+      "http://192.88.99.1/", // deprecated 6to4 relay
+      "http://198.18.0.1/", // benchmarking
+      "http://198.19.255.254/",
+      "http://198.51.100.1/", // documentation
+      "http://203.0.113.1/", // documentation
+      "http://224.0.0.1/", // multicast
+      "http://240.0.0.1/", // reserved
+      "http://255.255.255.255/", // broadcast
+    ];
+
+    for (const url of blocked) {
+      it(`blocks ${url}`, () => {
+        expect(() => assertSafeUrlSync(url)).toThrow("not allowed");
+      });
+    }
+  });
+
   describe("blocks private hostnames", () => {
     const blocked = [
       "http://localhost/",
       "http://localhost:8080/test",
       "http://LOCALHOST/", // case insensitive
       "http://metadata.google.internal/computeMetadata/v1/",
+      "http://metadata.google.internal./computeMetadata/v1/",
       "http://metadata.internal/",
+      "http://localhost.localdomain/",
     ];
 
     for (const url of blocked) {
@@ -89,6 +114,10 @@ describe("assertSafeUrlSync", () => {
       "http://[fc00::1]/", // unique local
       "http://[fd12:3456::1]/", // unique local
       "http://[fe80::1]/", // link-local
+      "http://[febf::1]/", // upper edge of link-local
+      "http://[fec0::1]/", // deprecated site-local
+      "http://[ff02::1]/", // multicast
+      "http://[2001:db8::1]/", // documentation
     ];
 
     for (const url of blocked) {

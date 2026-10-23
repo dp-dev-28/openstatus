@@ -167,6 +167,13 @@ function evaluateString(
   return { success: true };
 }
 
+function jsonPathValueToString(value: unknown): string {
+  if (value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
 function evaluateRecord(
   values: string[],
   compare: z.infer<typeof recordCompare>,
@@ -367,7 +374,9 @@ export class JsonBodyAssertion implements Assertion {
     }
     try {
       const json = JSON.parse(req.body);
-      const value = JSONPath({ path: this.schema.path, json });
+      const value = jsonPathValueToString(
+        JSONPath({ path: this.schema.path, json, wrap: false }),
+      );
       const { success, message } = evaluateString(
         value,
         this.schema.compare,
